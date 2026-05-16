@@ -143,12 +143,13 @@ class AppWindow(QMainWindow):
         # Row 4
         row4_layout = QHBoxLayout()
         row4_layout.addWidget(QLabel("API程序预设名称:"))
-        self.api_app_preset_input = QLineEdit(self.manager.config.config.get('api_app_preset', ''))
-        self.api_app_preset_input.textChanged.connect(self._on_api_preset_changed)
-        api_preset_btn = QPushButton("选择文件")
-        api_preset_btn.clicked.connect(self.select_api_preset_file)
+        self.api_app_preset_input = QLineEdit(self.manager.config.get_api_app_preset())
+        self.api_app_preset_input.setReadOnly(True)
+        # self.api_app_preset_input.textChanged.connect(self._on_api_preset_changed)
+        # api_preset_btn = QPushButton("选择文件")
+        # api_preset_btn.clicked.connect(self.select_api_preset_file)
         row4_layout.addWidget(self.api_app_preset_input)
-        row4_layout.addWidget(api_preset_btn)
+        # row4_layout.addWidget(api_preset_btn)
         task_layout.addLayout(row4_layout)
         
         task_group.setLayout(task_layout)
@@ -389,7 +390,7 @@ class AppWindow(QMainWindow):
             'proxy_file': self.manager.config.get_proxy_file(),
             'get_api': self.get_api_checkbox.isChecked(),
             'get_session': self.get_session_checkbox.isChecked(),
-            'api_app_preset': self.api_app_preset_input.text().strip(),
+            'api_app_preset': self.manager.config.get_api_app_preset(),
             'enable_password_setup': self.enable_pwd_checkbox.isChecked(),
             'email_file_path': self.manager.config.get_email_file_path(),
             'save_data_path': self.manager.config.get_account_data_path(),

@@ -27,6 +27,7 @@ class ConfigManager:
         self.config["proxy_file"] = "data/代理文件.txt"
         self.config["failed_video_path"] = "data/注册失败退款视频"
         self.config["success_video_path"] = "data/注册成功视频"
+        self.config["api_app_preset"] = "data/API预设名称.txt"
 
     def load_config(self):
         if os.path.exists(CONFIG_FILE):
@@ -170,6 +171,9 @@ class ConfigManager:
 
     def get_enable_get_session(self):
         return self.config.get("enable_get_session", False)
+
+    def get_api_app_preset(self):
+        return self.config.get("api_app_preset", "data/API预设名称.txt")
 
     def set_api_names_file(self, val):
         self.config["api_names_file"] = val
