@@ -51,6 +51,7 @@ class TGRegisterAutomation:
     def run(self, index, platform, country, max_price):
         self._current_phone = None
         self._received_code = False
+        self._needs_refund_video = False
         self._recording_process = None
         self._owns_record_lock = False
         self._final_res = False
@@ -112,8 +113,13 @@ class TGRegisterAutomation:
         self._owns_record_lock = False
         GLOBAL_RECORD_LOCK.release()
             
-        os.makedirs("data/videos/success", exist_ok=True)
-        os.makedirs("data/videos/needs_pwd", exist_ok=True)
+        from core.config import ConfigManager
+        config = ConfigManager()
+        success_dir = config.get_success_video_path()
+        failed_dir = config.get_failed_video_path()
+        
+        os.makedirs(success_dir, exist_ok=True)
+        os.makedirs(failed_dir, exist_ok=True)
         
         # 寻找新增的视频文件，等待最多10秒以便雷电把 tmp 结尾的文件转换完成
         target_video_file = None
@@ -153,13 +159,13 @@ class TGRegisterAutomation:
         dest_path = None
 
         if res is True:
-            dest_path = f"data/videos/success/{phone_str}.mp4"
+            dest_path = os.path.join(success_dir, f"{phone_str}.mp4")
             self.logger.info(f"[{index}] 完整的注册流程结束，保存视频到 {dest_path}", "TG注册")
-        elif self._received_code:
-            dest_path = f"data/videos/needs_pwd/{phone_str}.mp4"
-            self.logger.info(f"[{index}] 该号码已接受到验证码，但未完全成功，已保存录制的视频，名称为：{phone_str}.mp4", "TG注册")
+        elif self._received_code or getattr(self, '_needs_refund_video', False):
+            dest_path = os.path.join(failed_dir, f"{phone_str}.mp4")
+            self.logger.info(f"[{index}] 该号码注册失败或异常，保存录制的退款凭证视频到 {dest_path}", "TG注册")
         else:
-            self.logger.info(f"[{index}] 未获取验证码或前期失败，删除本地截取的录制视频", "TG注册")
+            self.logger.info(f"[{index}] 未获取验证码且无退款需求，删除本地截取的录制视频", "TG注册")
             try:
                 os.remove(source_path)
             except: pass
@@ -553,6 +559,7 @@ class TGRegisterAutomation:
 
             if state in ["banned", "email_lock", "invalid_number", "other_device"]:
                 self.logger.error(f"[{index}] 号码不可用 ({state})，请联系客服发送视频保存证据申请退款，准备放弃并交由流水线彻底删除该模拟器", "TG注册")
+                self._needs_refund_video = True
                 if state in ["banned", "email_lock", "other_device"]:
                     self._delay(10, 20)
                 # Cancel order

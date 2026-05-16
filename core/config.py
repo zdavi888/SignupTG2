@@ -1,17 +1,32 @@
 import json
 import os
 
-CONFIG_FILE = "ld_config.json"
+CONFIG_FILE = "config.json"
 
 class ConfigManager:
     def __init__(self):
         self.config = {
             "ld_path": "",
             "groups": {
-                "Default": [] # group_name: [list of instance names/indices]
-            }
+                "默认分组": [] # group_name: [list of instance names/indices]
+            },
+            "hero_sms_api_key": "",
+            "target_count": 10,
+            "concurrency": 3,
+            "sms_service": "telegram",
+            "sms_country": "any",
+            "sms_price": "default(min)",
+            "enable_password_setup": True,
+            "enable_get_api": False,
+            "enable_get_session": False,
         }
         self.load_config()
+        # Enforce fixed paths
+        self.config["account_data_path"] = "data/账号资料"
+        self.config["email_file_path"] = "data/Email列表.txt"
+        self.config["proxy_file"] = "data/代理文件.txt"
+        self.config["failed_video_path"] = "data/注册失败退款视频"
+        self.config["success_video_path"] = "data/注册成功视频"
 
     def load_config(self):
         if os.path.exists(CONFIG_FILE):
@@ -53,7 +68,7 @@ class ConfigManager:
         self.save_config()
 
     def get_proxy_file(self):
-        return self.config.get("proxy_file", "")
+        return self.config.get("proxy_file", "data/代理文件.txt")
 
     def set_hero_sms_api_key(self, api_key):
         self.config["hero_sms_api_key"] = api_key
@@ -123,21 +138,24 @@ class ConfigManager:
         self.save_config()
 
     def get_email_file_path(self):
-        return self.config.get("email_file_path", "")
+        return self.config.get("email_file_path", "data/Email列表.txt")
 
     def set_failed_video_path(self, val):
         self.config["failed_video_path"] = val
         self.save_config()
 
     def get_failed_video_path(self):
-        return self.config.get("failed_video_path", "")
+        return self.config.get("failed_video_path", "data/注册失败退款视频")
+
+    def get_success_video_path(self):
+        return self.config.get("success_video_path", "data/注册成功视频")
 
     def set_account_data_path(self, val):
         self.config["account_data_path"] = val
         self.save_config()
 
     def get_account_data_path(self):
-        return self.config.get("account_data_path", "")
+        return self.config.get("account_data_path", "data/账号资料")
 
     def set_enable_get_api(self, val):
         self.config["enable_get_api"] = val

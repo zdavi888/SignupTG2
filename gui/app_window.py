@@ -116,11 +116,12 @@ class AppWindow(QMainWindow):
         row2_layout = QHBoxLayout()
         row2_layout.addWidget(QLabel("代理文件(txt):"))
         self.proxy_path_input = QLineEdit(self.manager.config.get_proxy_file())
-        self.proxy_path_input.textChanged.connect(lambda t: self.manager.config.set_proxy_file(t))
-        proxy_btn = QPushButton("选择文件")
-        proxy_btn.clicked.connect(self.select_proxy_file)
+        self.proxy_path_input.setReadOnly(True)
+        # self.proxy_path_input.textChanged.connect(lambda t: self.manager.config.set_proxy_file(t))
+        # proxy_btn = QPushButton("选择文件")
+        # proxy_btn.clicked.connect(self.select_proxy_file)
         row2_layout.addWidget(self.proxy_path_input)
-        row2_layout.addWidget(proxy_btn)
+        # row2_layout.addWidget(proxy_btn)
         task_layout.addLayout(row2_layout)
         
         # Row 3
@@ -206,11 +207,11 @@ class AppWindow(QMainWindow):
         
         self.email_path_input = QLineEdit(self.manager.config.get_email_file_path())
         self.email_path_input.setReadOnly(True)
-        email_btn = QPushButton("选择文件")
-        email_btn.clicked.connect(self.select_email_file)
+        # email_btn = QPushButton("选择文件")
+        # email_btn.clicked.connect(self.select_email_file)
         email_row = QHBoxLayout()
         email_row.addWidget(self.email_path_input)
-        email_row.addWidget(email_btn)
+        # email_row.addWidget(email_btn)
         pwd_layout.addRow("邮箱列表:", email_row)
         
         pwd_group.setLayout(pwd_layout)
@@ -222,20 +223,20 @@ class AppWindow(QMainWindow):
         
         self.failed_video_input = QLineEdit(self.manager.config.get_failed_video_path())
         self.failed_video_input.setReadOnly(True)
-        failed_video_btn = QPushButton("选择文件夹")
-        failed_video_btn.clicked.connect(self.select_failed_video_dir)
+        # failed_video_btn = QPushButton("选择文件夹")
+        # failed_video_btn.clicked.connect(self.select_failed_video_dir)
         fv_row = QHBoxLayout()
         fv_row.addWidget(self.failed_video_input)
-        fv_row.addWidget(failed_video_btn)
+        # fv_row.addWidget(failed_video_btn)
         save_layout.addRow("注册失败视频:", fv_row)
         
         self.account_data_input = QLineEdit(self.manager.config.get_account_data_path())
         self.account_data_input.setReadOnly(True)
-        account_data_btn = QPushButton("选择文件夹")
-        account_data_btn.clicked.connect(self.select_account_data_dir)
+        # account_data_btn = QPushButton("选择文件夹")
+        # account_data_btn.clicked.connect(self.select_account_data_dir)
         ad_row = QHBoxLayout()
         ad_row.addWidget(self.account_data_input)
-        ad_row.addWidget(account_data_btn)
+        # ad_row.addWidget(account_data_btn)
         save_layout.addRow("账号资料:", ad_row)
         
         save_group.setLayout(save_layout)
@@ -375,7 +376,7 @@ class AppWindow(QMainWindow):
         self.manager.config.set_sms_service(self.platform_input.text().strip())
         self.manager.config.set_sms_country(self.country_input.text().strip())
         self.manager.config.set_sms_price(self.price_input.text().strip())
-        self.manager.config.set_proxy_file(self.proxy_path_input.text().strip())
+        # self.manager.config.set_proxy_file(self.proxy_path_input.text().strip())
         
         config = {
             'source_index': src_idx,
@@ -385,13 +386,13 @@ class AppWindow(QMainWindow):
             'service': self.platform_input.text().strip(),
             'country': self.country_input.text().strip(),
             'max_price': self.price_input.text().strip(),
-            'proxy_file': self.proxy_path_input.text().strip(),
+            'proxy_file': self.manager.config.get_proxy_file(),
             'get_api': self.get_api_checkbox.isChecked(),
             'get_session': self.get_session_checkbox.isChecked(),
             'api_app_preset': self.api_app_preset_input.text().strip(),
             'enable_password_setup': self.enable_pwd_checkbox.isChecked(),
-            'email_file_path': self.email_path_input.text().strip(),
-            'save_data_path': self.account_data_input.text().strip(),
+            'email_file_path': self.manager.config.get_email_file_path(),
+            'save_data_path': self.manager.config.get_account_data_path(),
             'prefix': 'TGClone_'
         }
         
