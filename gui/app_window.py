@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QGroupBox, QFormLayout, QMainWindow,
     QSpinBox, QMessageBox, QDoubleSpinBox, QCheckBox, QFileDialog, QGridLayout
 )
-from PyQt6.QtCore import pyqtSignal, QObject
+from PyQt6.QtCore import pyqtSignal, QObject, QTimer
 from core.manager import AutomationManager
 from core.logger import AppLogger
 from core.task_runner import TaskRunner
@@ -49,6 +49,12 @@ class AppWindow(QMainWindow):
         
         self._init_ui()
         self.refresh_instances()
+        
+        # 自动查询余额
+        self.balance_timer = QTimer(self)
+        self.balance_timer.timeout.connect(self.check_balance)
+        self.balance_timer.start(30000)  # 30秒
+        self.check_balance()
 
     def _init_ui(self):
         main_widget = QWidget()
@@ -343,12 +349,15 @@ class AppWindow(QMainWindow):
     def check_balance(self):
         api_key = self.api_key_input.text().strip()
         if not api_key:
-            self.logger.warning("请输入 API Key", "接码平台")
+            # 静默处理，不弹窗也不报 warning，因为可能是刚启动还没输入
             return
-        sms = HeroSMS(api_key)
-        bal = sms.get_balance()
-        self.balance_lbl.setText(f"${bal}" if bal != "Unknown" else bal)
-        self.logger.info(f"拉取到余额: {bal}", "接码平台")
+        try:
+            sms = HeroSMS(api_key)
+            bal = sms.get_balance()
+            self.balance_lbl.setText(f"${bal}" if bal != "Unknown" else bal)
+            self.logger.info(f"拉取到余额: {bal}", "接码平台")
+        except Exception as e:
+            self.logger.error(f"查询余额失败: {e}", "接码平台")
         
     def refresh_instances(self):
         try:
