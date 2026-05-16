@@ -1,0 +1,9 @@
+{
+    "ld_path": "C:\\Install\\安卓虚拟机\\leidian\\LDPlayer9\\dnconsole.exe",
+    "groups": {
+        "Default": []
+    },
+    "api_app_preset": "C:/Users/PC/Desktop/LD自动注册所需文件/API预设名称.txt",
+    "account_data_path": "C:/Users/PC/Desktop/TG资料保存路径",
+    "get_api": false
+}
