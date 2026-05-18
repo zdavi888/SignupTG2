@@ -102,10 +102,15 @@ class GetAPIHash:
         # 直接从当前模拟器页面开始操作
 
         while True:
-            # 1. 回到顶部
+            # 1. 回到顶部 (改用更稳健的手动上划方法)
             self._log_info(index, "回到顶部并清理旧数据...")
-            self.d(scrollable=True).scroll.toBeginning()
-            time.sleep(2)
+            try:
+                # 尝试点击页面顶部偏下位置（防止误触地址栏），然后向下连续滑动
+                for _ in range(3):
+                    self.d.swipe(0.5, 0.3, 0.5, 0.8) 
+                    time.sleep(0.5)
+            except Exception as e:
+                self._log_info(index, f"滑动到顶部时遇到小问题(跳过): {e}")
             
             # 2. 提取新名称
             app_title_text = self.get_api_app_name(index)
@@ -122,12 +127,13 @@ class GetAPIHash:
                 lbl_title = self.d(text="App title:")
                 if lbl_title.exists:
                     inp_title = lbl_title.down(className="android.widget.EditText")
-                    inp_title.click()
-                    time.sleep(0.5)
-                    inp_title.set_text("") # 删除之前的内容
-                    time.sleep(0.5)
-                    inp_title.set_text(content_text)
-                    time.sleep(1)
+                    if inp_title.exists:
+                        inp_title.click()
+                        time.sleep(0.5)
+                        inp_title.set_text("") # 尝试删除
+                        time.sleep(0.5)
+                        inp_title.set_text(content_text)
+                        time.sleep(1)
                 else:
                     self._log_error(index, "未找到 App title: 标签")
                     break
@@ -136,20 +142,23 @@ class GetAPIHash:
                 lbl_short = self.d(text="Short name:")
                 if lbl_short.exists:
                     inp_short = lbl_short.down(className="android.widget.EditText")
-                    inp_short.click()
-                    time.sleep(0.5)
-                    inp_short.set_text("") # 删除之前的内容
-                    time.sleep(0.5)
-                    inp_short.set_text(content_text)
-                    time.sleep(1)
+                    if inp_short.exists:
+                        inp_short.click()
+                        time.sleep(0.5)
+                        inp_short.set_text("") # 尝试删除
+                        time.sleep(0.5)
+                        inp_short.set_text(content_text)
+                        time.sleep(1)
                 
                 # URL (要求留空)
                 lbl_url = self.d(text="URL:")
                 if lbl_url.exists:
                      inp_url = lbl_url.down(className="android.widget.EditText")
-                     inp_url.set_text("")
+                     if inp_url.exists:
+                         inp_url.set_text("")
                 
-                self.d.swipe(0.5, 0.7, 0.5, 0.3)
+                # 滚动寻找 Android 和 Description
+                self.d.swipe(0.5, 0.8, 0.5, 0.4)
                 time.sleep(1)
                 
                 # Platform 选择 Android
@@ -161,19 +170,20 @@ class GetAPIHash:
                 # Description
                 lbl_desc = self.d(text="Description:")
                 if not lbl_desc.exists:
-                    self.d.swipe(0.5, 0.7, 0.5, 0.3)
+                    self.d.swipe(0.5, 0.8, 0.5, 0.4)
                     time.sleep(1)
                 
                 if lbl_desc.exists:
                     inp_desc = lbl_desc.down(className="android.widget.EditText")
-                    inp_desc.click()
-                    time.sleep(0.5)
-                    inp_desc.set_text("") # 删除之前的内容
-                    time.sleep(0.5)
-                    inp_desc.set_text(content_text)
-                    time.sleep(1)
+                    if inp_desc.exists:
+                        inp_desc.click()
+                        time.sleep(0.5)
+                        inp_desc.set_text("") # 尝试删除
+                        time.sleep(0.5)
+                        inp_desc.set_text(content_text)
+                        time.sleep(1)
 
-                self.d.swipe(0.5, 0.7, 0.5, 0.3)
+                self.d.swipe(0.5, 0.8, 0.5, 0.4)
                 time.sleep(1)
                 
                 # 4. 点击创建
