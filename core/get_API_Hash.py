@@ -142,37 +142,83 @@ class GetAPIHash:
             # 兼容有些时候到了这步但是没显示标题的情况
             pass
             
-        self._log_info(index, "需等待 10 秒后提取验证码通知...")
+        self._log_info(index, "需等待 10 秒后开始提取验证码通知...")
         time.sleep(10)
         
         verify_code = None
-        for _ in range(12): # 等待 1 分钟
+        for attempt in range(12): # 等待约 1 分钟
             self.d.shell("cmd statusbar expand-notifications")
             time.sleep(2)
-            xml = self.d.dump_hierarchy()
-            # 提取 11 位字母数字混合码
-            matches = re.findall(r'[a-zA-Z0-9]{11}', xml)
+            
+            try:
+                xml = self.d.dump_hierarchy()
+                # 提取所有 text 属性内容
+                all_raw_texts = re.findall(r'text="([^"]*)"', xml)
+                
+                # 合并并按行拆分，过滤掉明显非验证码的系统词汇
+                filtered_lines = []
+                for t in all_raw_texts:
+                    t = t.strip()
+                    if not t or t.lower() in ["telegram", "mark as read", "via", "reply"]: continue
+                    filtered_lines.append(t)
+                
+                # 调试打印，方便用户看到抓取到了什么
+                self._log_info(index, f"[通知探测] 抓取到的文本行: {filtered_lines}")
+
+                # 核心逻辑 1: 寻找包含冒号且后面跟着11位码的行
+                for line in filtered_lines:
+                    if ":" in line or "：" in line:
+                        # 看看冒号后面是不是就是那个码
+                        parts = re.split(r'[:：]', line)
+                        for p in parts:
+                            p_clean = p.strip()
+                            if len(p_clean) == 11 and any(c.isdigit() for c in p_clean) and any(c.isalpha() for c in p_clean):
+                                verify_code = p_clean
+                                break
+                    if verify_code: break
+
+                # 核心逻辑 2: 寻找上一行以冒号结尾，下一行是11位码的情况
+                if not verify_code:
+                    for i in range(len(filtered_lines) - 1):
+                        curr = filtered_lines[i]
+                        nxt = filtered_lines[i+1]
+                        if curr.endswith(':') or curr.endswith('：'):
+                            if len(nxt) == 11 and any(c.isdigit() for c in nxt) and any(c.isalpha() for c in nxt):
+                                verify_code = nxt
+                                break
+                
+                # 备用逻辑：直接正则搜 11 位码
+                if not verify_code:
+                    for line in filtered_lines:
+                        m = re.findall(r'[a-zA-Z0-9]{11}', line)
+                        for code in m:
+                            if any(c.isdigit() for c in code) and any(c.isalpha() for c in code):
+                                # 排除掉一些可能的 UI 词
+                                if code.lower() not in ["framelayout", "progressbar", "linearlayout"]:
+                                    verify_code = code
+                                    break
+                        if verify_code: break
+            except Exception as e:
+                self._log_error(index, f"解析通知 XML 出错: {e}")
+            
             self.d.shell("cmd statusbar collapse")
-            
-            for code in matches:
-                # 排除像 Telegram 这样的词
-                if code.lower() != "telegram" and len(code) == 11:
-                    verify_code = code
-                    break
-            
             if verify_code: break
+            
+            self._log_info(index, f"未检测到验证码，等待 5 秒后重试 (第 {attempt+1}/12 次)...")
             time.sleep(5)
             
         if not verify_code:
-            self._log_error(index, "未能从通知栏提取到 11 位验证码")
+            self._log_error(index, "未能从通知栏提取到 11 位有效验证码")
             return False
             
-        self._log_info(index, f"提取到验证码: {verify_code}，正在填入...")
+        self._log_info(index, f"🎉 成功提取验证码: {verify_code}，正在填入...")
         
         code_inputs = self.d(className="android.widget.EditText")
         if code_inputs.exists:
             # 最后一个通常是验证码框
             code_box = code_inputs[code_inputs.count - 1]
+            code_box.click()
+            time.sleep(0.5)
             code_box.set_text(verify_code)
             time.sleep(2)
             self.d.swipe(0.5, 0.7, 0.5, 0.4)
@@ -272,34 +318,54 @@ class GetAPIHash:
                 time.sleep(1)
                 
                 # Create
-                create_btn = self.d(text="Create application", className="android.widget.Button")
-                if not create_btn.exists: create_btn = self.d(text="Create application")
-                
-                if create_btn.exists:
-                    create_btn.click()
-                    time.sleep(10)
+                self._log_info(index, "正在向下滚动寻找 Create application 按钮...")
+                # 强化滚动寻找逻辑
+                for _ in range(5):
+                    # 检查按钮是否在当前视口
+                    create_btn = self.d(text="Create application", className="android.widget.Button")
+                    if not create_btn.exists: 
+                        create_btn = self.d(text="Create application")
                     
-                    if self.d(textContains="App api_id:").exists:
-                        self._log_info(index, "创建成功")
+                    if create_btn.exists:
+                        # 确保按钮在视口内且可点击
+                        self._log_info(index, "已找到创建按钮，点击中...")
+                        create_btn.click()
+                        time.sleep(10)
+                        break
+                    
+                    # 如果没找到，继续向上滑（页面向下滚）
+                    self.d.swipe(0.5, 0.8, 0.5, 0.2)
+                    time.sleep(1.5)
+                else:
+                    self._log_error(index, "滚动寻找 5 次后仍未找到 Create application 按钮")
+                    break
+                    
+                # 判定结果
+                if self.d(textContains="App api_id:").exists:
+                        self._log_info(index, "🎉 创建成功！正在提取数据...")
                         return self.extract_and_save_api(index, phone_number)
                     else:
                         error_dismissed = False
+                        # 尝试捕获报错弹窗并点击确认
                         for btn_text in ["确定", "OK", "确 定", "Confirm"]:
                             btn = self.d(text=btn_text)
                             if btn.exists:
-                                self._log_error(index, f"创建受阻 (发现 {btn_text} 弹窗)，处理完毕将重试...")
+                                self._log_error(index, f"创建提示报错 (发现 {btn_text} 弹窗)，正在尝试清理并换名重试...")
                                 btn.click()
                                 error_dismissed = True
                                 break
                         
                         if error_dismissed:
-                            time.sleep(1)
+                            time.sleep(2)
                             continue 
                         else:
-                            self._log_error(index, "无法判定状态且未见弹窗，终止")
+                            # 如果没弹窗也没成功，可能还在加载或者静默错误
+                            self._log_error(index, "未能检测到成功跳转或报错弹窗，尝试再次提取验证...")
+                            if self.d(textContains="App api_id:").exists:
+                                return self.extract_and_save_api(index, phone_number)
                             break
                 else:
-                    self._log_error(index, "找不到 Create 按钮")
+                    self._log_error(index, "滚动 3 次后仍未找到 Create application 按钮")
                     break
             except Exception as e:
                 self._log_error(index, f"表单异常: {e}")
