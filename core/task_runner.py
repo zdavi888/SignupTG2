@@ -1,6 +1,7 @@
 import threading
 import time
 import random
+import os
 from core.v2ray import V2rayAutomation
 from core.weiba import WeibaAutomation
 from core.tg_register import TGRegisterAutomation
@@ -20,22 +21,19 @@ class TaskRunner(threading.Thread):
         self.stop_requested = False
         self.stop_new_tasks = False
         
-        self.proxies = []
+        self.proxy_pools = {} # { file_path: [proxy_list] }
         self.api_names = []
-        import os
-        if self.config.get('proxy_file') and os.path.exists(self.config.get('proxy_file')):
-            try:
-                with open(self.config.get('proxy_file'), "r", encoding="utf-8") as f:
-                    self.proxies = [line.strip() for line in f if line.strip()]
-                self.logger.info(f"成功读取代理数量: {len(self.proxies)}", "系统控制")
-            except Exception as e:
-                self.logger.error(f"读取代理文件失败: {e}", "系统控制")
-                
-        if self.config.get('api_app_preset') and os.path.exists(self.config.get('api_app_preset')):
+        
+        # Helper to normalize paths
+        self.root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        # Load default API names
+        api_preset_file = self.normalize_path(self.config.get('api_app_preset'))
+        if api_preset_file and os.path.exists(api_preset_file):
             try:
                 for enc in ['utf-8', 'gbk', 'utf-8-sig']:
                     try:
-                        with open(self.config.get('api_app_preset'), "r", encoding=enc) as f:
+                        with open(api_preset_file, "r", encoding=enc) as f:
                             self.api_names = [line.strip() for line in f if line.strip()]
                         break
                     except UnicodeDecodeError:
@@ -43,6 +41,64 @@ class TaskRunner(threading.Thread):
                 self.logger.info(f"成功读取API预设名称数量: {len(self.api_names)}", "系统控制")
             except Exception as e:
                 self.logger.error(f"读取API预设名称文件失败: {e}", "系统控制")
+
+    def normalize_path(self, path):
+        if not path: return None
+        if not os.path.isabs(path):
+            return os.path.join(self.root_dir, path)
+        return path
+
+    def get_proxy_by_country(self, country, index):
+        """根据国家获取代理，并从文件中移除已使用的代理"""
+        with self.lock:
+            # 确定代理文件路径
+            proxy_file = None
+            if country and country != "any":
+                # 严格在 data/代理/ 下查找
+                country_proxy = os.path.join(self.root_dir, "data", "代理", f"{country}.txt")
+                if os.path.exists(country_proxy):
+                    proxy_file = country_proxy
+                else:
+                    self.logger.error(f"[{index}] 未找到国家专属代理文件: {country_proxy}。根据要求，流程终止。", "系统控制")
+                    return None
+            else:
+                proxy_file = self.normalize_path(self.config.get('proxy_file', "data/代理文件.txt"))
+
+            if not proxy_file or not os.path.exists(proxy_file):
+                self.logger.error(f"[{index}] 代理文件不存在: {proxy_file}", "系统控制")
+                return None
+
+            # 加载或取缓存
+            if proxy_file not in self.proxy_pools:
+                try:
+                    with open(proxy_file, "r", encoding="utf-8") as f:
+                        self.proxy_pools[proxy_file] = [line.strip() for line in f if line.strip()]
+                except Exception as e:
+                    self.logger.error(f"[{index}] 读取代理文件 {proxy_file} 失败: {e}", "系统控制")
+                    return None
+
+            pool = self.proxy_pools[proxy_file]
+            if not pool:
+                self.logger.warning(f"[{index}] 代理文件已耗尽: {proxy_file}", "系统控制")
+                return None
+
+            proxy_str = pool.pop(0)
+            
+            # 回写文件：保持原有的移除逻辑
+            try:
+                # 记录已使用
+                used_file = os.path.join(os.path.dirname(proxy_file), "used_proxies.txt")
+                with open(used_file, "a", encoding="utf-8") as f:
+                    f.write(f"{proxy_str} ({country})\n")
+                
+                # 写回原文件 (移除已使用的)
+                with open(proxy_file, "w", encoding="utf-8") as f:
+                    for p in pool:
+                        f.write(p + "\n")
+            except Exception as e:
+                self.logger.warning(f"[{index}] 更新代理文件异常: {e}", "流水线")
+            
+            return proxy_str
 
     def run(self):
         self.is_running = True
@@ -235,22 +291,13 @@ class TaskRunner(threading.Thread):
             for attempt in range(3):
                 if self.stop_requested: return
                 
-                proxy_str = None
-                with self.lock:
-                    if self.proxies:
-                        proxy_str = self.proxies.pop(0)
-                        # 更新已用代理
-                        try:
-                            import os
-                            used_file = os.path.join(os.path.dirname(self.config['proxy_file']), "used_proxies.txt")
-                            with open(used_file, "a", encoding="utf-8") as f:
-                                f.write(proxy_str + "\n")
-                            # 将剩余代理写回原文件
-                            with open(self.config['proxy_file'], "w", encoding="utf-8") as f:
-                                for p in self.proxies:
-                                    f.write(p + "\n")
-                        except Exception as e:
-                            self.logger.warning(f"[{index}] 代理写入记录异常: {e}", "流水线")
+                # 动态获取对应国家的代理
+                country = self.config.get('country') or self.config.get('sms_country', 'any')
+                proxy_str = self.get_proxy_by_country(country, index)
+                
+                if not proxy_str:
+                    self.logger.error(f"[{index}] 无法获取可用代理，任务终止", "流水线")
+                    break
                 
                 success, msg = v2ray.configure_v2ray_for_instance(index, proxy_str=proxy_str) 
                 if success:
@@ -317,10 +364,16 @@ class TaskRunner(threading.Thread):
                 
                 try:
                     import os
+                    current_dir = os.path.dirname(os.path.abspath(__file__))
+                    root_dir = os.path.dirname(current_dir)
+                    
                     save_path = self.config.get('account_data_path')
                     if not save_path:
                         self.logger.warning(f"[{index}] 未配置'账号资料'存放路径，请在界面设置。账号信息将保存在默认路径中。", "系统配置")
-                        save_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                        save_path = os.path.join(root_dir, "data", "账号资料")
+                        
+                    if not os.path.isabs(save_path):
+                        save_path = os.path.join(root_dir, save_path)
                         
                     if not os.path.exists(save_path):
                         os.makedirs(save_path)
@@ -372,10 +425,12 @@ class TaskRunner(threading.Thread):
                                 try:
                                     import os
                                     preset_file = self.config.get('api_app_preset')
-                                    if preset_file and os.path.exists(preset_file):
-                                        with open(preset_file, "w", encoding="utf-8") as f:
-                                            for name in self.api_names:
-                                                f.write(name + "\n")
+                                    if preset_file:
+                                        preset_file = self.normalize_path(preset_file)
+                                        if os.path.exists(preset_file):
+                                            with open(preset_file, "w", encoding="utf-8") as f:
+                                                for name in self.api_names:
+                                                    f.write(name + "\n")
                                 except Exception as e:
                                     self.logger.warning(f"[{index}] API名称写入原文件异常: {e}", "流水线")
                         
@@ -417,7 +472,12 @@ class TaskRunner(threading.Thread):
                     # 3. 备份到对应的手机号文件夹
                     save_path = self.config.get('save_data_path')
                     if not save_path:
-                        save_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                        current_dir = os.path.dirname(os.path.abspath(__file__))
+                        save_path = os.path.join(os.path.dirname(os.path.dirname(current_dir)), "data", "账号资料")
+                    
+                    if not os.path.isabs(save_path):
+                        current_dir = os.path.dirname(os.path.abspath(__file__))
+                        save_path = os.path.join(os.path.dirname(os.path.dirname(current_dir)), save_path)
                     target_folder = os.path.join(save_path, clean_phone)
                     if not os.path.exists(target_folder):
                         os.makedirs(target_folder)

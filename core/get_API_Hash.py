@@ -31,21 +31,21 @@ class GetAPIHash:
         if hasattr(self, 'pre_fetched_app_name') and self.pre_fetched_app_name:
             return self.pre_fetched_app_name
             
-        # 提取预设名称
-        app_name_file = "API 程序预设名称.txt"
+        # 获取项目根目录
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dir = os.path.dirname(current_dir)
         
-        # 寻找文件路径
-        config_val = self.config.get('api_app_preset') if (self.config and getattr(self.config, 'get', None)) else None
-        if config_val and config_val.strip():
-            app_name_file = config_val.strip()
-            # 如果是相对路径，可以基于运行目录转换为绝对路径
-            if not os.path.isabs(app_name_file):
-                app_name_file = os.path.abspath(app_name_file)
-        else:
-            # 默认同级或上一级根目录
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            root_dir = os.path.dirname(current_dir)
-            app_name_file = os.path.join(root_dir, "API 程序预设名称.txt")
+        # 优先从配置获取，否则使用固定默认值
+        app_name_file = None
+        if self.config and getattr(self.config, 'get', None):
+            app_name_file = self.config.get('api_app_preset')
+            
+        if not app_name_file:
+            app_name_file = os.path.join("data", "API预设名称.txt")
+            
+        # 统一转为绝对路径
+        if not os.path.isabs(app_name_file):
+            app_name_file = os.path.join(root_dir, app_name_file)
 
         if not os.path.exists(app_name_file):
             self._log_error(index, f"预设名称文件不存在，查找路径为: {app_name_file}")
@@ -474,14 +474,18 @@ class GetAPIHash:
 
     def _save_account_data(self, index, phone_number, api_id, api_hash, app_title, short_name):
         try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            root_dir = os.path.dirname(current_dir)
+            
             save_path = None
             if self.config and getattr(self.config, 'get', None):
-                save_path = self.config.get('save_data_path')
+                # 统一使用 account_data_path
+                save_path = self.config.get('account_data_path')
                 
             if not save_path:
-                self._log_info(index, "未检测到配置存储路径，自动保存在项目默认目录。")
-                current_dir = os.path.dirname(os.path.abspath(__file__))
-                save_path = os.path.dirname(os.path.dirname(current_dir))
+                save_path = os.path.join(root_dir, "data", "账号资料")
+            elif not os.path.isabs(save_path):
+                save_path = os.path.join(root_dir, save_path)
 
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
@@ -512,13 +516,17 @@ class GetAPIHash:
 
     def _record_failure(self, index, phone_number, reason):
         try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            root_dir = os.path.dirname(current_dir)
+            
             save_path = None
             if self.config and getattr(self.config, 'get', None):
-                save_path = self.config.get('save_data_path')
+                save_path = self.config.get('account_data_path')
                 
             if not save_path:
-                current_dir = os.path.dirname(os.path.abspath(__file__))
-                save_path = os.path.dirname(os.path.dirname(current_dir))
+                save_path = os.path.join(root_dir, "data", "账号资料")
+            elif not os.path.isabs(save_path):
+                save_path = os.path.join(root_dir, save_path)
 
             if not os.path.exists(save_path):
                 os.makedirs(save_path)

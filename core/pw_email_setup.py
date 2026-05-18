@@ -47,7 +47,13 @@ class PwEmailSetupManager:
                 return None, None
 
     def execute_setup(self, index, phone_number):
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dir = os.path.dirname(current_dir)
+        
         email_file = self.config.get('email_file_path')
+        if not os.path.isabs(email_file):
+            email_file = os.path.join(root_dir, email_file)
+            
         if not email_file:
             self.logger.error(f"[{index}] 未配置邮箱列表文件，无法进行密码与邮箱绑定。", "设置密码")
             return False
@@ -78,8 +84,13 @@ class PwEmailSetupManager:
             save_path = self.config.get('account_data_path')
             if not save_path:
                 self.logger.warning(f"[{index}] 未配置'账号资料'存放路径，请在界面设置。账号密码信息将保存在默认路径中。", "系统配置")
-                save_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # Project root
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                save_path = os.path.join(os.path.dirname(os.path.dirname(current_dir)), "data", "账号资料")
                 
+            if not os.path.isabs(save_path):
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                save_path = os.path.join(os.path.dirname(os.path.dirname(current_dir)), save_path)
+
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
             

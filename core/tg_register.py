@@ -114,8 +114,18 @@ class TGRegisterAutomation:
             
         from core.config import ConfigManager
         config = ConfigManager()
-        success_dir = config.get_success_video_path()
-        failed_dir = config.get_failed_video_path()
+        
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dir = os.path.dirname(current_dir)
+        
+        def normalize_path(path):
+            if not path: return None
+            if not os.path.isabs(path):
+                return os.path.join(root_dir, path)
+            return path
+            
+        success_dir = normalize_path(config.get_success_video_path())
+        failed_dir = normalize_path(config.get_failed_video_path())
         
         os.makedirs(success_dir, exist_ok=True)
         os.makedirs(failed_dir, exist_ok=True)

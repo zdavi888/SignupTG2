@@ -37,6 +37,25 @@ class ConfigManager:
                     self.config.update(data)
             except Exception as e:
                 print(f"Failed to load config: {e}")
+        
+        # 强制修正可能存在问题的路径为相对路径，确保在容器环境中也能找到
+        fixed_paths = {
+            "account_data_path": "data/账号资料",
+            "email_file_path": "data/Email列表.txt",
+            "proxy_file": "data/代理文件.txt",
+            "failed_video_path": "data/注册失败退款视频",
+            "success_video_path": "data/注册成功视频",
+            "api_app_preset": "data/API预设名称.txt"
+        }
+        for key, val in fixed_paths.items():
+            current_val = self.config.get(key)
+            # 如果配置中的路径包含 C: 或者 Users 等明显是外部系统的路径，或者文件不存在且是绝对路径，则强制设为默认值
+            if current_val:
+                if ":" in current_val or "Users" in current_val:
+                    if not os.path.exists(current_val):
+                        self.config[key] = val
+            else:
+                self.config[key] = val
 
     def save_config(self):
         try:
