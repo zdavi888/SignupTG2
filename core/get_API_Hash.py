@@ -81,6 +81,22 @@ class GetAPIHash:
         return app_name
 
     def run(self, index, phone_number=None):
+        # 0. 效验是否勾选了“获取API”按钮，没勾选即便调用也禁止运行
+        is_get_api_enabled = False
+        if self.config:
+            # 兼容处理：可能传入的是 ConfigManager 实例，也可能是内置字典
+            if hasattr(self.config, 'config') and isinstance(self.config.config, dict):
+                # 针对 ConfigManager 类实例
+                cfg_dict = self.config.config
+                is_get_api_enabled = cfg_dict.get('get_api', False) or cfg_dict.get('enable_get_api', False)
+            elif hasattr(self.config, 'get'):
+                # 针对字典或支持 get 方法的对象
+                is_get_api_enabled = self.config.get('get_api', False) or self.config.get('enable_get_api', False)
+
+        if not is_get_api_enabled:
+            self._log_error(index, "❌ 检测到界面中未勾选“获取API”选项，流程已被禁止运行。请在设置中开启该选项。")
+            return False
+
         if not phone_number:
             self._log_error(index, "没有提供手机号参数，无法获取API")
             return False
@@ -342,31 +358,28 @@ class GetAPIHash:
                     
                 # 判定结果
                 if self.d(textContains="App api_id:").exists:
-                        self._log_info(index, "🎉 创建成功！正在提取数据...")
-                        return self.extract_and_save_api(index, phone_number)
-                    else:
-                        error_dismissed = False
-                        # 尝试捕获报错弹窗并点击确认
-                        for btn_text in ["确定", "OK", "确 定", "Confirm"]:
-                            btn = self.d(text=btn_text)
-                            if btn.exists:
-                                self._log_error(index, f"创建提示报错 (发现 {btn_text} 弹窗)，正在尝试清理并换名重试...")
-                                btn.click()
-                                error_dismissed = True
-                                break
-                        
-                        if error_dismissed:
-                            time.sleep(2)
-                            continue 
-                        else:
-                            # 如果没弹窗也没成功，可能还在加载或者静默错误
-                            self._log_error(index, "未能检测到成功跳转或报错弹窗，尝试再次提取验证...")
-                            if self.d(textContains="App api_id:").exists:
-                                return self.extract_and_save_api(index, phone_number)
-                            break
+                    self._log_info(index, "🎉 创建成功！正在提取数据...")
+                    return self.extract_and_save_api(index, phone_number)
                 else:
-                    self._log_error(index, "滚动 3 次后仍未找到 Create application 按钮")
-                    break
+                    error_dismissed = False
+                    # 尝试捕获报错弹窗并点击确认
+                    for btn_text in ["确定", "OK", "确 定", "Confirm"]:
+                        btn = self.d(text=btn_text)
+                        if btn.exists:
+                            self._log_error(index, f"创建提示报错 (发现 {btn_text} 弹窗)，正在尝试清理并换名重试...")
+                            btn.click()
+                            error_dismissed = True
+                            break
+                    
+                    if error_dismissed:
+                        time.sleep(2)
+                        continue 
+                    else:
+                        # 如果没弹窗也没成功，可能还在加载或者静默错误
+                        self._log_error(index, "未能检测到成功跳转或报错弹窗，尝试再次提取验证...")
+                        if self.d(textContains="App api_id:").exists:
+                            return self.extract_and_save_api(index, phone_number)
+                        break
             except Exception as e:
                 self._log_error(index, f"表单异常: {e}")
                 break
