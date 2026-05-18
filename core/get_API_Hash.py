@@ -91,342 +91,131 @@ class GetAPIHash:
         try:
             self.d = u2.connect(device_addr)
             self.d.implicitly_wait(10.0)
+            self._log_info(index, f"成功连接设备: {self.d.serial}")
         except Exception as e:
             self._log_error(index, f"无法连接设备: {e}")
             return False
 
-        self._log_info(index, "==== 开始执行找回的 Via 浏览器流程 ====")
+        self._log_info(index, "==== [DEBUG模式] 跳过登录/验证，直接从当前页面进行表单操作 ====")
         
-        # 退回桌面
-        self.d.press("home")
-        time.sleep(2)
+        # 暂时跳过所有浏览器启动、URL 访问和登录步骤
+        # 直接从当前模拟器页面开始操作
 
-        # 确保后台无 via 以防页面缓存
-        self.d.shell("am force-stop mark.via")
-        time.sleep(1)
-
-        self._log_info(index, "启动 Via 浏览器...")
-        # 普通启动 Via
-        self.d.shell("am start -n mark.via/.Shell")
-        time.sleep(5)
-        
-        # 处理欢迎页面同意并继续
-        if self.d(text="同意并继续").exists:
-            self._log_info(index, "点击同意并继续...")
-            self.d(text="同意并继续").click()
-            time.sleep(3)
-            
-        # 到图2 (关于页面)，点击下面的回到首页图标
-        if self.d(text="联系我们").exists or self.d(text="官方网站").exists or self.d(text="拾穗").exists:
-            self._log_info(index, "当前在关于页面(图2)，点击底部回到首页图标...")
-            width, height = self.d.window_size()
-            self.d.click(width // 2, height - 30)
+        while True:
+            # 1. 回到顶部
+            self._log_info(index, "回到顶部并清理旧数据...")
+            self.d(scrollable=True).scroll.toBeginning()
             time.sleep(2)
             
-        # 严格使用老版本逻辑：直接通过意图访问指定 URL
-        self._log_info(index, "在浏览器主页(图3)中访问 https://my.telegram.org/auth ...")
-        self.d.shell("am start -a android.intent.action.VIEW -d 'https://my.telegram.org/auth' mark.via")
-        time.sleep(8)
+            # 2. 提取新名称
+            app_title_text = self.get_api_app_name(index)
+            if not app_title_text:
+                self._log_error(index, "提取不到预设名称，任务终止。")
+                return False
+            
+            content_text = app_title_text
+            self._log_info(index, f"新提取名称: {content_text}")
 
-        self._log_info(index, "等待 my.telegram.org 页面加载完成...")
-        
-        # 老版本逻辑：验证是否到了手机号输入步骤
-        if not self.d(textContains="Your Phone Number").wait(timeout=15.0):
-            self._log_error(index, "未能显示 Telegram Auth 页面")
-            return False
-
-        # 老版本逻辑：输入手机号
-        phone_input = self.d(className="android.widget.EditText")
-        if phone_input.exists:
-            self._log_info(index, f"填写手机号: {phone_number}")
-            phone_input[0].set_text(phone_number)
-            time.sleep(1)
-        else:
-            self._log_error(index, "找不到手机号输入框")
-            return False
-            
-        # 向下滑动页面，确保Next按钮可见
-        self.d.swipe(0.5, 0.7, 0.5, 0.3)
-        time.sleep(1)
-            
-        next_btn = self.d(text="Next", className="android.widget.Button")
-        if not next_btn.exists:
-             next_btn = self.d(text="Next")
-        if not next_btn.exists:
-            self._log_error(index, "找不到 Next 按钮！")
-            return False
-            
-        next_btn.click()
-        time.sleep(3)
-        self._log_info(index, "等待Confirmation code输入框出现...")
-        
-        if not self.d(textContains="Confirmation").wait(timeout=10):
-            self._log_error(index, "手机号输入后未显示验证码输入框 (可能是请求过于频繁或被屏蔽)")
-            return False
-            
-        self._log_info(index, "等待 10 秒后开始查看通知栏... (防止立刻查看时验证码还未到达)")
-        time.sleep(10)
-        
-        self._log_info(index, "等待系统接收 Telegram 验证码通知 (最长等待5分钟)...")
-        
-        verify_code = None
-        
-        # 等待长达5分钟 (60次 * 5秒)
-        for _ in range(60):
-            # 展开通知栏获取即时弹出的所有消息文本
-            # 兼容所有Android版本的下拉通知栏命令
-            self.d.shell("cmd statusbar expand-notifications")
-            time.sleep(2)
-            
-            texts = []
             try:
-                xml = self.d.dump_hierarchy()
-                import re
-                matches = re.findall(r'text="([^"]*)"', xml)
-                for txt in matches:
-                    txt = txt.strip()
-                    if txt and txt not in texts:
-                        texts.append(txt)
-            except Exception as e:
-                self._log_error(index, f"读取UI元素出错: {e}")
+                # 3. 填写并删除之前的数据
+                # App title
+                lbl_title = self.d(text="App title:")
+                if lbl_title.exists:
+                    inp_title = lbl_title.down(className="android.widget.EditText")
+                    inp_title.click()
+                    time.sleep(0.5)
+                    inp_title.set_text("") # 删除之前的内容
+                    time.sleep(0.5)
+                    inp_title.set_text(content_text)
+                    time.sleep(1)
+                else:
+                    self._log_error(index, "未找到 App title: 标签")
+                    break
+                    
+                # Short name
+                lbl_short = self.d(text="Short name:")
+                if lbl_short.exists:
+                    inp_short = lbl_short.down(className="android.widget.EditText")
+                    inp_short.click()
+                    time.sleep(0.5)
+                    inp_short.set_text("") # 删除之前的内容
+                    time.sleep(0.5)
+                    inp_short.set_text(content_text)
+                    time.sleep(1)
                 
-            # 收起通知栏恢复界面
-            self.d.shell("cmd statusbar collapse")
-            time.sleep(1)
-            # 防御性收起
-            try:
-                self.d.shell("input swipe 500 1500 500 200")
-            except:
-                pass
-            time.sleep(2)
-
-            if texts:
-                full_text = "\n".join(texts)
+                # URL (要求留空)
+                lbl_url = self.d(text="URL:")
+                if lbl_url.exists:
+                     inp_url = lbl_url.down(className="android.widget.EditText")
+                     inp_url.set_text("")
                 
-                # 只要存在 Telegram 通知就进入处理
-                if "Telegram" in texts or "Telegram Notifications" in texts:
-                    if not hasattr(self, '_seen_notifications'):
-                        self._seen_notifications = set()
+                self.d.swipe(0.5, 0.7, 0.5, 0.3)
+                time.sleep(1)
+                
+                # Platform 选择 Android
+                plt_android = self.d(text="Android")
+                if plt_android.exists:
+                    plt_android.click()
+                    time.sleep(1)
+                
+                # Description
+                lbl_desc = self.d(text="Description:")
+                if not lbl_desc.exists:
+                    self.d.swipe(0.5, 0.7, 0.5, 0.3)
+                    time.sleep(1)
+                
+                if lbl_desc.exists:
+                    inp_desc = lbl_desc.down(className="android.widget.EditText")
+                    inp_desc.click()
+                    time.sleep(0.5)
+                    inp_desc.set_text("") # 删除之前的内容
+                    time.sleep(0.5)
+                    inp_desc.set_text(content_text)
+                    time.sleep(1)
+
+                self.d.swipe(0.5, 0.7, 0.5, 0.3)
+                time.sleep(1)
+                
+                # 4. 点击创建
+                create_btn = self.d(text="Create application", className="android.widget.Button")
+                if not create_btn.exists: 
+                    create_btn = self.d(text="Create application")
+                
+                if create_btn.exists:
+                    self._log_info(index, "点击 Create application...")
+                    create_btn.click()
+                    time.sleep(10) # 等待网页跳转或报错
                     
-                    import re
-                    # 首先提取消息内容
-                    tmp_lines = []
-                    sender = "Telegram"
-                    seen_sender = False
-                    
-                    for txt in texts:
-                        # 兼容 dump_hierarchy() 中可能存在的 &#10; 换行符
-                        txt = txt.replace('&#10;', '\n')
-                        for line in txt.split('\n'):
-                            clean_line = line.strip()
-                            if clean_line:
-                                tmp_lines.append(clean_line)
-
-                    content_lines = []
-                    for clean_txt in tmp_lines:
-                        if clean_txt in ["REPLY", "MARK AS READ", "管理通知", "全部清除", "开启", "关闭", "•"]:
-                            continue
-                            
-                        if clean_txt in ["Telegram", "Telegram Notifications"] and not seen_sender:
-                            sender = clean_txt
-                            seen_sender = True
-                            continue
-                            
-                        # 过滤无关时间或短占位符
-                        if re.match(r'^(\d{1,2}:\d{2}|\d+%|\d+月\d+日.*|.*周.*|今天|昨天|now|现在|\d+\s*分钟.*|.*new messages.*)$', clean_txt, re.IGNORECASE):
-                            continue
-                            
-                        # 过滤掉常见的系统通知，增加输入键盘提示
-                        if clean_txt in ["Android 系统", "配置实体键盘", "点按即可选择语言和布局", "LSPosed", "LSPosed 已加载", "USB调试已连接", "点按即可关闭USB调试", "更改键盘", "雷电输入法", "物理键盘"]:
-                            continue
-                            
-                        content_lines.append(clean_txt)
-
-                    # 使用提取出的核心内容进行去重以防止输入法通知或其他系统通知改变造成的刷屏
-                    if not content_lines:
-                        continue
+                    # 5. 判定结果
+                    if self.d(textContains="App api_id:").exists or self.d(textContains="App api_id").exists:
+                        self._log_info(index, "恭喜，创建成功！跳转到结果页面。")
+                        return self.extract_and_save_api(index, phone_number)
+                    else:
+                        # 处理报错弹窗（移植自测试脚本）
+                        error_dismissed = False
+                        # 兼容多种可能的确定按钮文字
+                        for btn_text in ["确定", "OK", "确 定", "Confirm"]:
+                            btn = self.d(text=btn_text)
+                            if btn.exists:
+                                self._log_error(index, f"名称 {content_text} 失败 (发现 {btn_text} 弹窗)，移除错误并更新名称重试...")
+                                btn.click()
+                                error_dismissed = True
+                                break
                         
-                    content_str = "\n".join(content_lines)
-                    signature = hash(content_str)
-                    
-                    if signature not in self._seen_notifications:
-                        self._seen_notifications.add(signature)
-                        
-                        self._log_info(index, f"发件人：{sender}")
-                        self._log_info(index, "正文：")
-                        for line in content_lines:
-                            self._log_info(index, line)
-                                
-                        verify_code = None
-                        
-                        # 尝试多行匹配：上一行以冒号结尾，当前行为11位验证码
-                        for i in range(len(content_lines) - 1):
-                            current_line = content_lines[i].strip()
-                            next_line = content_lines[i+1].strip()
-                            if current_line.endswith(':') or current_line.endswith('：'):
-                                if len(next_line) == 11:
-                                    verify_code = next_line
-                                    break
-
-                        # 如果没找到，尝试单行正则提取：冒号后面紧跟 11 位验证码（忽略中间空格）
-                        if not verify_code:
-                            for line in content_lines:
-                                # 匹配冒号后面紧跟的 11 位字母或数字，且后面不再跟着字母数字（确保精确11位）
-                                match = re.search(r'[:：]\s*([a-zA-Z0-9]{11})(?![a-zA-Z0-9])', line)
-                                if match:
-                                    verify_code = match.group(1)
-                                    break
-
-                        if verify_code:
-                            self._log_info(index, "识别为官方验证码消息")
-                            self._log_info(index, f"验证码为：{verify_code}")
+                        if error_dismissed:
+                            time.sleep(1)
+                            continue # 重新开始一轮填写
+                        else:
+                            self._log_error(index, "未检测到成功页面，也没看到报错弹窗，流程终止。")
                             break
-
-            if verify_code:
+                else:
+                    self._log_error(index, "未找到 Create application 按钮")
+                    break
+            except Exception as e:
+                self._log_error(index, f"表单处理发生异常: {e}")
                 break
-            time.sleep(5)
-            
-        if not verify_code:
-            self._log_error(index, "获取验证码超时或未找到，任务终止。")
-            return False
-            
-        self._log_info(index, "返回浏览器页面输入验证码...")
         
-        edit_texts = self.d(className="android.widget.EditText")
-        if edit_texts.count > 0:
-            # 同样通常取最后一个
-            pwd_box = edit_texts[edit_texts.count - 1]
-        else:
-            self._log_error(index, "页面中找不到验证码的输入框。")
-            return False
-
-        pwd_box.click()
-        time.sleep(1)
-        pwd_box.set_text(verify_code)
-        time.sleep(2)
-        
-        # 向下滑动页面，确保 Sign In 按钮可见
-        self.d.swipe(0.5, 0.7, 0.5, 0.3)
-        time.sleep(1)
-        
-        sign_in_btn = self.d(text="Sign In", className="android.widget.Button")
-        if not sign_in_btn.exists:
-             sign_in_btn = self.d(className="android.widget.Button", textContains="Sign In")
-             if not sign_in_btn.exists:
-                 self._log_error(index, "未找到 Sign In 按钮！")
-                 return False
-                 
-        self._log_info(index, "点击 Sign In...")
-        sign_in_btn.click()
-        time.sleep(5)
-        
-        api_dev_link = self.d(text="API development tools")
-        if not api_dev_link.wait(timeout=15.0):
-             self._log_error(index, "未能找到 API development tools 链接。可能登录失败或未进入主页。")
-             return False
-             
-        self._log_info(index, "进入 API development tools...")
-        api_dev_link.click()
-        time.sleep(5)
-        
-        if self.d(textContains="App api_id:").exists or self.d(textContains="App api_id").exists:
-             self._log_info(index, "检测到已经在该账号上分配过 API。尝试直接提取...")
-             return self.extract_and_save_api(index, phone_number)
-        elif self.d(text="Create new application").exists or self.d(textContains="Create new application").exists:
-             self._log_info(index, "准备创建新应用...")
-             
-             while True:
-                  app_title_text = self.get_api_app_name(index)
-                  if not app_title_text:
-                      self._log_error(index, "提取不到预设名称（可能文件已空或者不存在）。返回桌面，流程终止。")
-                      self._save_account_data(index, phone_number, "", "", "名称不足", "未完成API申请")
-                      self.d.press("home")
-                      return False
-                  
-                  content_text = app_title_text
-                  
-                  self._log_info(index, f"统一使用名称填写表单: {content_text}")
-
-                  try:
-                      app_title_lbl = self.d(text="App title:")
-                      if app_title_lbl.exists:
-                          self._log_info(index, "填写 App title...")
-                          app_title_input = app_title_lbl.down(className="android.widget.EditText")
-                          app_title_input.click()
-                          time.sleep(0.5)
-                          app_title_input.set_text(content_text)
-                          time.sleep(1)
-                  except Exception as e:
-                      self._log_error(index, f"填写 App title 出错: {e}")
-    
-                  try:
-                      short_name_lbl = self.d(text="Short name:")
-                      if short_name_lbl.exists:
-                          self._log_info(index, "填写 Short name...")
-                          short_name_input = short_name_lbl.down(className="android.widget.EditText")
-                          short_name_input.click()
-                          time.sleep(0.5)
-                          short_name_input.set_text(content_text)
-                          time.sleep(1)
-                  except Exception as e:
-                      self._log_error(index, f"填写 Short name 出错: {e}")
-    
-                  self.d.swipe(0.5, 0.7, 0.5, 0.3)
-                  time.sleep(1)
-                  
-                  self._log_info(index, "从标题 Platform 中点击选择 Android...")
-                  try:
-                      platform_android = self.d(text="Android")
-                      if platform_android.exists:
-                          platform_android.click()
-                      time.sleep(1)
-                  except Exception as e:
-                      self._log_error(index, f"选择 Platform 出错: {e}")
-    
-                  self.d.swipe(0.5, 0.7, 0.5, 0.3)
-                  time.sleep(1)
-    
-                  try:
-                      desc_lbl = self.d(text="Description:")
-                      if not desc_lbl.exists:
-                          self.d.swipe(0.5, 0.7, 0.5, 0.3)
-                          time.sleep(1)
-                          
-                      if desc_lbl.exists:
-                          self._log_info(index, "填写 Description...")
-                          desc_input = desc_lbl.down(className="android.widget.EditText")
-                          desc_input.click()
-                          time.sleep(0.5)
-                          desc_input.set_text(content_text)
-                          time.sleep(1)
-                  except Exception as e:
-                      self._log_error(index, f"填写 Description 出错: {e}")
-    
-                  self.d.swipe(0.5, 0.7, 0.5, 0.3)
-                  time.sleep(1)
-    
-                  create_btn = self.d(text="Create application", className="android.widget.Button")
-                  if not create_btn.exists:
-                      create_btn = self.d(text="Create application")
-    
-                  if create_btn.exists:
-                      create_btn.click()
-                      self._log_info(index, "点击 Create application 等待创建...")
-                      time.sleep(5)
-                      
-                      if self.d(textContains="App api_id:").exists or self.d(textContains="App api_id").exists:
-                          return self.extract_and_save_api(index, phone_number)
-                      else:
-                          self._log_error(index, f"名称 {content_text} 可能被占用或报错，返回顶部重新尝试提取一个新名称...")
-                          self.d(scrollable=True).scroll.toBeginning()
-                          time.sleep(1)
-                          continue
-                  else:
-                      self._log_error(index, "未找到 Create application 按钮！")
-                      return False
-        else:
-             self._log_error(index, "无法判定当前页面状态（既没有已有API信息，也没有创建表单）。")
-             return False
+        return False
 
     def extract_and_save_api(self, index, phone_number):
         self._log_info(index, "正在提取分配给该账号的 api_id 与 api_hash...")
