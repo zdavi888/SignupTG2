@@ -259,16 +259,22 @@ class GetAPIHash:
                                 
                         verify_code = None
                         
-                        # 规则1: 发件人为Telegram或者Telegram Notifications 已经匹配
-                        # 规则2: 验证码上面一行肯定用冒号结尾
-                        # 规则3: 验证码肯定为固定的11位，不做其他限制
+                        # 尝试多行匹配：上一行以冒号结尾，当前行为11位验证码
                         for i in range(len(content_lines) - 1):
                             current_line = content_lines[i].strip()
                             next_line = content_lines[i+1].strip()
-                            
                             if current_line.endswith(':') or current_line.endswith('：'):
                                 if len(next_line) == 11:
                                     verify_code = next_line
+                                    break
+
+                        # 如果没找到，尝试单行正则提取：冒号后面紧跟 11 位验证码（忽略中间空格）
+                        if not verify_code:
+                            for line in content_lines:
+                                # 匹配冒号后面紧跟的 11 位字母或数字，且后面不再跟着字母数字（确保精确11位）
+                                match = re.search(r'[:：]\s*([a-zA-Z0-9]{11})(?![a-zA-Z0-9])', line)
+                                if match:
+                                    verify_code = match.group(1)
                                     break
 
                         if verify_code:
